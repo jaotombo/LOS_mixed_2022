@@ -30,6 +30,11 @@
 --  For example, the score is calculated for neonates, but it is likely inappropriate to actually use the score values for these patients.
 
 -- extract CPAP from the "Oxygen Delivery Device" fields
+set search_path to mimiciii;
+
+drop materialized view if exists sapsii;
+create materialized view sapsii as
+
 with cpap as
 (
   select ie.icustay_id
@@ -39,8 +44,8 @@ with cpap as
           WHEN lower(ce.value) LIKE '%cpap%' THEN 1
           WHEN lower(ce.value) LIKE '%bipap mask%' THEN 1
         else 0 end) as cpap
-  FROM `physionet-data.mimiciii_clinical.icustays` ie
-  inner join `physionet-data.mimiciii_clinical.chartevents` ce
+  FROM icustays ie
+  inner join chartevents ce
     on ie.icustay_id = ce.icustay_id
     and ce.charttime between ie.intime and DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
   where itemid in
@@ -64,8 +69,8 @@ with cpap as
       PARTITION BY adm.HADM_ID
       ORDER BY TRANSFERTIME
     ) as serviceOrder
-  FROM `physionet-data.mimiciii_clinical.admissions` adm
-  left join `physionet-data.mimiciii_clinical.services` se
+  FROM admissions adm
+  left join services se
     on adm.hadm_id = se.hadm_id
 )
 -- icd-9 diagnostic codes are our best source for comorbidity information
@@ -97,7 +102,7 @@ select hadm_id
     when icd9_code = '20979' then 1
     when icd9_code = '78951' then 1
   		end) as mets      /* Metastatic cancer */
-  from `physionet-data.mimiciii_clinical.diagnoses_icd`
+  from diagnoses_icd
   group by hadm_id
 )
 , pafi1 as
@@ -108,8 +113,8 @@ select hadm_id
   , pao2fio2
   , case when vd.icustay_id is not null then 1 else 0 end as vent
   , case when cp.icustay_id is not null then 1 else 0 end as cpap
-  from `physionet-data.mimiciii_derived.blood_gas_first_day_arterial` bg
-  left join `physionet-data.mimiciii_derived.ventilation_durations` vd
+  from blood_gas_first_day_arterial bg
+  left join ventilation_durations vd
     on bg.icustay_id = vd.icustay_id
     and bg.charttime >= vd.starttime
     and bg.charttime <= vd.endtime
@@ -135,7 +140,7 @@ select ie.subject_id, ie.hadm_id, ie.icustay_id
 
       -- the casts ensure the result is numeric.. we could equally extract EPOCH from the interval
       -- however this code works in Oracle and Postgres
-      , DATETIME_DIFF(ie.intime, pat.dob, YEAR) as age
+      , DATETIME_DIFF_YEAR(ie.intime, pat.dob) as age
 
       , vital.heartrate_max
       , vital.heartrate_min
@@ -177,10 +182,10 @@ select ie.subject_id, ie.hadm_id, ie.icustay_id
         end as admissiontype
 
 
-FROM `physionet-data.mimiciii_clinical.icustays` ie
-inner join `physionet-data.mimiciii_clinical.admissions` adm
+FROM icustays ie
+inner join admissions adm
   on ie.hadm_id = adm.hadm_id
-inner join `physionet-data.mimiciii_clinical.patients` pat
+inner join patients pat
   on ie.subject_id = pat.subject_id
 
 -- join to above views
@@ -192,13 +197,13 @@ left join comorb
   on ie.hadm_id = comorb.hadm_id
 
 -- join to custom tables to get more data....
-left join `physionet-data.mimiciii_derived.gcs_first_day` gcs
+left join gcs_first_day gcs
   on ie.icustay_id = gcs.icustay_id
-left join `physionet-data.mimiciii_derived.vitals_first_day` vital
+left join vitals_first_day vital
   on ie.icustay_id = vital.icustay_id
-left join `physionet-data.mimiciii_derived.urine_output_first_day` uo
+left join urine_output_first_day uo
   on ie.icustay_id = uo.icustay_id
-left join `physionet-data.mimiciii_derived.labs_first_day` labs
+left join labs_first_day labs
   on ie.icustay_id = labs.icustay_id
 )
 , scorecomp as
@@ -376,7 +381,7 @@ select ie.subject_id, ie.hadm_id, ie.icustay_id
 , gcs_score
 , comorbidity_score
 , admissiontype_score
-FROM `physionet-data.mimiciii_clinical.icustays` ie
+FROM icustays ie
 left join score s
   on ie.icustay_id = s.icustay_id
 order by ie.icustay_id;

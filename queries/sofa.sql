@@ -29,6 +29,11 @@
 -- Note:
 --  The score is calculated for *all* ICU patients, with the assumption that the user will subselect appropriate ICUSTAY_IDs.
 --  For example, the score is calculated for neonates, but it is likely inappropriate to actually use the score values for these patients.
+set search_path to mimiciii;
+
+drop materialized view if exists sofa;
+create materialized view sofa as
+
 
 with wt AS
 (
@@ -45,8 +50,8 @@ with wt AS
         ELSE null
       END) AS weight
 
-  FROM `physionet-data.mimiciii_clinical.icustays` ie
-  left join `physionet-data.mimiciii_clinical.chartevents` c
+  FROM icustays ie
+  left join chartevents c
     on ie.icustay_id = c.icustay_id
   WHERE valuenum IS NOT NULL
   AND itemid IN
@@ -65,8 +70,8 @@ with wt AS
 -- 5% of patients are missing a weight, but we can impute weight using their echo notes
 , echo2 as(
   select ie.icustay_id, avg(weight * 0.45359237) as weight
-  FROM `physionet-data.mimiciii_clinical.icustays` ie
-  left join `physionet-data.mimiciii_notes.echo_data` echo
+  FROM icustays ie
+  left join echo_data echo
     on ie.hadm_id = echo.hadm_id
     and echo.charttime > DATETIME_SUB(ie.intime, INTERVAL '7' DAY)
     and echo.charttime < DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
@@ -91,8 +96,8 @@ with wt AS
     , max(case when itemid in (30043,30307) then rate end) as rate_dopamine
     , max(case when itemid in (30042,30306) then rate end) as rate_dobutamine
 
-  FROM `physionet-data.mimiciii_clinical.icustays` ie
-  inner join `physionet-data.mimiciii_clinical.inputevents_cv` cv
+  FROM icustays ie
+  inner join inputevents_cv cv
     on ie.icustay_id = cv.icustay_id and cv.charttime between ie.intime and DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
   left join wt
     on ie.icustay_id = wt.icustay_id
@@ -110,8 +115,8 @@ with wt AS
     , max(case when itemid = 221289 then rate end) as rate_epinephrine
     , max(case when itemid = 221662 then rate end) as rate_dopamine
     , max(case when itemid = 221653 then rate end) as rate_dobutamine
-  FROM `physionet-data.mimiciii_clinical.icustays` ie
-  inner join `physionet-data.mimiciii_clinical.inputevents_mv` mv
+  FROM icustays ie
+  inner join inputevents_mv mv
     on ie.icustay_id = mv.icustay_id and mv.starttime between ie.intime and DATETIME_ADD(ie.intime, INTERVAL '1' DAY)
   where itemid in (221906,221289,221662,221653)
   -- 'Rewritten' orders are not delivered to the patient
@@ -124,8 +129,8 @@ with wt AS
   select bg.icustay_id, bg.charttime
   , pao2fio2
   , case when vd.icustay_id is not null then 1 else 0 end as isvent
-  from `physionet-data.mimiciii_derived.blood_gas_first_day_arterial` bg
-  left join `physionet-data.mimiciii_derived.ventilation_durations` vd
+  from blood_gas_first_day_arterial bg
+  left join ventilation_durations vd
     on bg.icustay_id = vd.icustay_id
     and bg.charttime >= vd.starttime
     and bg.charttime <= vd.endtime
@@ -162,20 +167,20 @@ select ie.icustay_id
   , uo.urineoutput
 
   , gcs.mingcs
-FROM `physionet-data.mimiciii_clinical.icustays` ie
+FROM icustays ie
 left join vaso_cv cv
   on ie.icustay_id = cv.icustay_id
 left join vaso_mv mv
   on ie.icustay_id = mv.icustay_id
 left join pafi2 pf
  on ie.icustay_id = pf.icustay_id
-left join `physionet-data.mimiciii_derived.vitals_first_day` v
+left join vitals_first_day v
   on ie.icustay_id = v.icustay_id
-left join `physionet-data.mimiciii_derived.labs_first_day` l
+left join labs_first_day l
   on ie.icustay_id = l.icustay_id
-left join `physionet-data.mimiciii_derived.urine_output_first_day` uo
+left join urine_output_first_day uo
   on ie.icustay_id = uo.icustay_id
-left join `physionet-data.mimiciii_derived.gcs_first_day` gcs
+left join gcs_first_day gcs
   on ie.icustay_id = gcs.icustay_id
 )
 , scorecalc as
@@ -264,7 +269,7 @@ select ie.subject_id, ie.hadm_id, ie.icustay_id
 , cardiovascular
 , cns
 , renal
-FROM `physionet-data.mimiciii_clinical.icustays` ie
+FROM icustays ie
 left join scorecalc s
   on ie.icustay_id = s.icustay_id
 order by ie.icustay_id;

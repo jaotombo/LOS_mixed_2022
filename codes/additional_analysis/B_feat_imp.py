@@ -157,7 +157,7 @@ for key, value in vect_dict.items():
     plt.xlabel('Mean |Weight|',size=20)
 
     plt.savefig(f"{path_to_repo}figures/lime_{preproc_tag}{lemma_tag}{death_tag}", bbox_inches='tight')
-    plt.show()
+    
 
     #Plot the raw mean --------------------------------------------------
     fig, ax = plt.subplots(nrows=1, ncols=1,figsize=(10,15))
@@ -174,4 +174,59 @@ for key, value in vect_dict.items():
     plt.xlabel('Mean Weight',size=20)
 
     plt.savefig(f"{path_to_repo}figures/lime_{preproc_tag}{lemma_tag}{death_tag}_raw", bbox_inches='tight')
-    plt.show()
+    
+
+
+
+
+    # Get a dictionary of words
+    dict_of_words = {i:0 for i in words}
+
+    # And get the correct weights
+    for count, single_list in enumerate(weights):
+        for i, weight in enumerate(single_list):
+            dict_of_words[labels[count][i]] += abs(weight)
+
+    # Transform everything to a pandas dataframe
+    weight_df = pd.DataFrame([dict_of_words.keys(), dict_of_words.values()]).T
+    weight_df.columns = ['word', 'weight']
+    weight_df['weight'] = weight_df.weight.astype(int)
+
+    # sort values by absolute mean - and get only the top 30 words by absolute value
+    abs_mean = weight_df.sort_values('weight', ascending = False).head(30)
+    abs_mean.weight = abs_mean.weight/len(weights)
+    # normalize by 100%
+    abs_mean['weight_norm'] = abs_mean.weight/abs_mean.weight.max()*100
+
+    abs_mean = abs_mean.sort_values('weight_norm', ascending = True)
+
+    #Plot abs mean --------------------------------------------------
+    fig, ax = plt.subplots(nrows=1, ncols=1,figsize=(10,15))
+
+    y_ticks = range(len(abs_mean))
+    y_labels = abs_mean.word
+    plt.barh(y=y_ticks,width=abs_mean.weight_norm)
+
+    plt.yticks(ticks=y_ticks,labels=y_labels,size= 15)
+    plt.title('LIME Weights - Average Absolute Values of Test Set Explanations')
+    plt.ylabel('')
+    plt.xlabel('Mean |Weight|',size=20)
+
+    plt.savefig(f"{path_to_repo}figures/lime_{preproc_tag}{lemma_tag}{death_tag}_abs_norm", bbox_inches='tight')
+    
+
+    
+    #Plot abs mean --------------------------------------------------
+    fig, ax = plt.subplots(nrows=1, ncols=1,figsize=(10,15))
+
+    y_ticks = range(len(abs_mean))
+    y_labels = abs_mean.word
+    plt.barh(y=y_ticks,width=abs_mean.weight)
+
+    plt.yticks(ticks=y_ticks,labels=y_labels,size= 15)
+    plt.title('LIME Weights - Average Absolute Values of Test Set Explanations')
+    plt.ylabel('')
+    plt.xlabel('Mean |Weight|',size=20)
+
+    plt.savefig(f"{path_to_repo}figures/lime_{preproc_tag}{lemma_tag}{death_tag}_abs", bbox_inches='tight')
+    
